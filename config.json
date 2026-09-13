@@ -1,0 +1,47 @@
+{
+    "roi": {
+        "x": 100,
+        "y": 200,
+        "width": 800,
+        "height": 500
+    },
+
+    "capture": {
+        "capture_fps": 30,
+        "detection_fps": 10
+    },
+
+    "detection": {
+        "match_threshold": 0.75,
+        "nms_overlap_threshold": 0.3
+    },
+
+    "tracking": {
+        "tracking_distance": 80,
+        "missing_frames_tolerance": 3
+    },
+
+    "attack": {
+        "attack_cooldown": 0.5,
+        "click_duration": 0.05
+    },
+
+    "controller": {
+        "type": "pico",
+        "port": "COM3",
+        "baudrate": 115200,
+        "enabled": false
+    },
+
+    "reference_point": {
+        "x": 960,
+        "y": 540
+    },
+
+    "debug": {
+        "show_confidence": true,
+        "show_ids": true,
+        "show_fps": true,
+        "show_roi": true
+    }
+}
