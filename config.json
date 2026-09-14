@@ -28,10 +28,10 @@
         },
 
         "template": {
-            "match_threshold": 0.72,
+            "match_threshold": 0.60,
             "nms_overlap_threshold": 0.3,
-            "scales": [1.0],
-            "fallback_to_motion": false,
+            "scales": [0.8, 1.0, 1.2],
+            "fallback_to_motion": true,
             "padding": 40
         }
     },
