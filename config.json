@@ -15,15 +15,15 @@
         "mode": "motion",
 
         "motion": {
-            "diff_threshold": 20,
-            "min_area": 3000,
-            "max_area": 40000,
-            "min_width": 40,
-            "max_width": 250,
-            "min_height": 40,
-            "max_height": 250,
-            "dilate_iterations": 3,
-            "history_frames": 3,
+            "diff_threshold": 35,
+            "min_area": 4000,
+            "max_area": 35000,
+            "min_width": 50,
+            "max_width": 220,
+            "min_height": 50,
+            "max_height": 220,
+            "dilate_iterations": 2,
+            "history_frames": 5,
             "nms_overlap_threshold": 0.3
         },
 
