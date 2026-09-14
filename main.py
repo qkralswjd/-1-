@@ -223,6 +223,8 @@ class MonsterBot:
                     print("[Main] ROI 재설정...")
                     self._interactive_roi_select()
                     self._detector.reset()         # 배경 히스토리 초기화
+                elif key == ord('t') or key == ord('T'):  # t → 템플릿 캡처
+                    self._capture_template(frame)
                 elif key == ord('c'):              # c → 추적 초기화
                     print("[Main] 추적 정보 초기화")
                     self._tracker.clear()
@@ -306,6 +308,123 @@ class MonsterBot:
         x, y = self._target.center_x, self._target.center_y
         self._controller.attack(x, y)
         self._last_attack_time = now
+
+    # ------------------------------------------------------------------
+    # 템플릿 캡처 (T 키)
+    # ------------------------------------------------------------------
+
+    def _capture_template(self, frame: np.ndarray):
+        """
+        현재 프레임을 그대로 캡처 창으로 보여주고
+        마우스 드래그로 몬스터 영역을 선택해서 templates/에 저장한다.
+        메인 루프를 블로킹하지 않고 별도 창에서 처리한다.
+        """
+        import os
+
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        os.makedirs(templates_dir, exist_ok=True)
+
+        print("\n[Template] 드래그로 몬스터를 선택하세요.")
+        print("  Enter/Space: 저장 | R: 다시선택 | ESC: 취소\n")
+
+        window = "템플릿 캡처 - 드래그 후 Enter"
+        cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+        h, w = frame.shape[:2]
+        cv2.resizeWindow(window, min(w, 1400), min(h, 900))
+
+        # 드래그 상태
+        drag = {"start": None, "end": None, "dragging": False}
+
+        def mouse_cb(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                drag["start"] = (x, y)
+                drag["end"] = (x, y)
+                drag["dragging"] = True
+            elif event == cv2.EVENT_MOUSEMOVE and drag["dragging"]:
+                drag["end"] = (x, y)
+            elif event == cv2.EVENT_LBUTTONUP:
+                drag["end"] = (x, y)
+                drag["dragging"] = False
+
+        cv2.setMouseCallback(window, mouse_cb)
+
+        saved_count = 0
+
+        while True:
+            display = frame.copy()
+
+            # 선택 영역 그리기
+            if drag["start"] and drag["end"]:
+                x1 = min(drag["start"][0], drag["end"][0])
+                y1 = min(drag["start"][1], drag["end"][1])
+                x2 = max(drag["start"][0], drag["end"][0])
+                y2 = max(drag["start"][1], drag["end"][1])
+                rw, rh = x2 - x1, y2 - y1
+                if rw > 5 and rh > 5:
+                    cv2.rectangle(display, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(display, f"{rw}x{rh}  Enter=저장",
+                                (x1, max(y1 - 8, 16)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # 안내
+            cv2.putText(display,
+                        f"드래그:선택  Enter:저장  R:초기화  ESC:닫기  저장:{saved_count}개",
+                        (8, display.shape[0] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 255), 1)
+
+            cv2.imshow(window, display)
+            key = cv2.waitKey(30) & 0xFF
+
+            # Enter / Space → 저장
+            if key in (13, 32):
+                if drag["start"] and drag["end"]:
+                    x1 = min(drag["start"][0], drag["end"][0])
+                    y1 = min(drag["start"][1], drag["end"][1])
+                    x2 = max(drag["start"][0], drag["end"][0])
+                    y2 = max(drag["start"][1], drag["end"][1])
+                    rw, rh = x2 - x1, y2 - y1
+                    if rw > 5 and rh > 5:
+                        cropped = frame[y1:y2, x1:x2]
+                        existing = [f for f in os.listdir(templates_dir)
+                                    if f.lower().endswith(".png")]
+                        name = f"monster_{len(existing)+1:02d}.png"
+                        out_path = os.path.join(templates_dir, name)
+                        cv2.imwrite(out_path, cropped)
+                        saved_count += 1
+                        print(f"[Template] 저장: {name} ({rw}x{rh}px)")
+
+                        # 저장 확인 표시
+                        confirm = display.copy()
+                        cv2.putText(confirm, f"저장완료! {name}",
+                                    (w//2 - 150, h//2),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+                                    (0, 255, 0), 2)
+                        cv2.imshow(window, confirm)
+                        cv2.waitKey(600)
+
+                        # 선택 초기화 (다음 몬스터 선택 가능)
+                        drag["start"] = None
+                        drag["end"] = None
+
+            # R → 선택 초기화
+            elif key in (ord('r'), ord('R')):
+                drag["start"] = None
+                drag["end"] = None
+
+            # ESC → 닫기
+            elif key == 27:
+                break
+
+        cv2.destroyWindow(window)
+
+        if saved_count > 0:
+            print(f"[Template] 총 {saved_count}개 저장 완료 → {templates_dir}")
+            print("[Template] 'r' 키로 탐지기를 재시작하면 새 템플릿이 적용됩니다.")
+        else:
+            print("[Template] 저장된 템플릿 없음")
+
+        # 배경 히스토리 초기화 (일시정지 후 재개)
+        self._detector.reset()
 
     # ------------------------------------------------------------------
     # 일시정지
