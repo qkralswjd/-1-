@@ -81,6 +81,15 @@ class ReferencePoint:
 
 
 @dataclass
+class PlayerExclusionConfig:
+    """플레이어 위치 제외 영역 설정."""
+    enabled: bool = True
+    x: int = 972
+    y: int = 390
+    radius: int = 100
+
+
+@dataclass
 class DebugConfig:
     show_confidence: bool = True
     show_ids: bool = True
@@ -97,6 +106,7 @@ class Config:
     attack: AttackConfig = field(default_factory=AttackConfig)
     controller: ControllerConfig = field(default_factory=ControllerConfig)
     reference_point: ReferencePoint = field(default_factory=ReferencePoint)
+    player_exclusion: PlayerExclusionConfig = field(default_factory=PlayerExclusionConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
 
 
@@ -132,6 +142,8 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             cfg.controller = ControllerConfig(**data["controller"])
         if "reference_point" in data:
             cfg.reference_point = ReferencePoint(**data["reference_point"])
+        if "player_exclusion" in data:
+            cfg.player_exclusion = PlayerExclusionConfig(**data["player_exclusion"])
         if "debug" in data:
             cfg.debug = DebugConfig(**data["debug"])
 

@@ -176,6 +176,12 @@ class MonsterBot:
                             roi_offset_x=roi.x,
                             roi_offset_y=roi.y
                         )
+                        # 플레이어 위치 제외
+                        pe = self._cfg.player_exclusion
+                        if pe.enabled:
+                            detections = self._detector.filter_player(
+                                detections, pe.x, pe.y, pe.radius
+                            )
                         # ── 3. 추적 업데이트 ──────────────────────────────
                         monsters = self._tracker.update(detections)
                     self._last_detection_time = now
@@ -196,7 +202,8 @@ class MonsterBot:
                     ref_y=self._cfg.reference_point.y,
                     capture_fps=self._capture.fps,
                     detection_fps=self._detector.detection_fps,
-                    state=self._state
+                    state=self._state,
+                    player_exclusion=self._cfg.player_exclusion
                 )
 
                 cv2.imshow(window_name, debug_frame)

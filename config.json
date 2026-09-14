@@ -51,8 +51,15 @@
     },
 
     "reference_point": {
-        "x": 960,
-        "y": 540
+        "x": 972,
+        "y": 390
+    },
+
+    "player_exclusion": {
+        "enabled": true,
+        "x": 972,
+        "y": 390,
+        "radius": 100
     },
 
     "debug": {

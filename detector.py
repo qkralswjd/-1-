@@ -149,6 +149,28 @@ class MotionDetector:
 
         return result
 
+    def filter_player(self,
+                      detections: List[MonsterDetection],
+                      player_x: int,
+                      player_y: int,
+                      radius: int) -> List[MonsterDetection]:
+        """
+        플레이어 위치 반경 radius 이내의 탐지 결과를 제거한다.
+        detector.detect() 후 별도로 호출한다.
+        """
+        import math
+        filtered = []
+        for det in detections:
+            dist = math.sqrt(
+                (det.center_x - player_x) ** 2 +
+                (det.center_y - player_y) ** 2
+            )
+            if dist > radius:
+                filtered.append(det)
+            else:
+                pass  # 플레이어 위치 → 무시
+        return filtered
+
     # ------------------------------------------------------------------
     # 배경 업데이트
     # ------------------------------------------------------------------

@@ -68,7 +68,8 @@ class Overlay:
              ref_x: int, ref_y: int,
              capture_fps: float,
              detection_fps: float,
-             state: str = "") -> np.ndarray:
+             state: str = "",
+             player_exclusion=None) -> np.ndarray:
         """
         frame에 모든 디버그 정보를 그려서 반환한다.
         원본 frame을 수정하지 않고 복사본에 그린다.
@@ -81,6 +82,18 @@ class Overlay:
 
         # 2. 기준점 (플레이어 위치)
         self._draw_reference(out, ref_x, ref_y)
+
+        # 2-1. 플레이어 제외 영역
+        if player_exclusion and player_exclusion.enabled:
+            cv2.circle(out,
+                       (player_exclusion.x, player_exclusion.y),
+                       player_exclusion.radius,
+                       (0, 80, 180), 1)
+            self._put_label(out, "PLAYER", 
+                            player_exclusion.x - 25,
+                            player_exclusion.y - player_exclusion.radius - 5,
+                            font_scale=FONT_SCALE_SMALL,
+                            text_color=(0, 140, 255))
 
         # 3. 몬스터 박스
         for monster in monsters:
