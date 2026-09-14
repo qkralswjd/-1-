@@ -12,7 +12,7 @@
     },
 
     "detection": {
-        "mode": "motion",
+        "mode": "template",
 
         "motion": {
             "diff_threshold": 60,
@@ -30,7 +30,7 @@
         "template": {
             "match_threshold": 0.60,
             "nms_overlap_threshold": 0.3,
-            "scales": [0.8, 1.0, 1.2],
+            "scales": [1.0],
             "fallback_to_motion": true,
             "padding": 40
         }
