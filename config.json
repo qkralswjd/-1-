@@ -5,54 +5,68 @@
         "width": 1121,
         "height": 580
     },
+
     "capture": {
         "capture_fps": 30,
         "detection_fps": 15
     },
+
     "detection": {
-        "mode": "motion",
+        "mode": "hybrid",
+
         "motion": {
-            "diff_threshold": 60,
-            "min_area": 4000,
-            "max_area": 35000,
-            "min_width": 50,
-            "max_width": 220,
-            "min_height": 50,
-            "max_height": 220,
+            "diff_threshold": 35,
+            "min_area": 1500,
+            "max_area": 40000,
+            "min_width": 30,
+            "max_width": 250,
+            "min_height": 30,
+            "max_height": 250,
             "dilate_iterations": 2,
             "history_frames": 5,
             "nms_overlap_threshold": 0.3
         },
+
         "template": {
-            "match_threshold": 0.75,
-            "nms_overlap_threshold": 0.3
+            "match_threshold": 0.72,
+            "nms_overlap_threshold": 0.3,
+            "scales": [0.8, 1.0, 1.2],
+            "fallback_to_motion": false,
+            "padding": 40
         }
     },
+
     "tracking": {
         "tracking_distance": 100,
         "missing_frames_tolerance": 5
     },
+
     "attack": {
         "attack_cooldown": 0.5,
         "click_duration": 0.05
     },
+
     "controller": {
         "type": "pico",
         "port": "COM3",
         "baudrate": 115200,
         "enabled": false
     },
+
     "reference_point": {
         "x": 972,
         "y": 390
     },
+
     "player_exclusion": {
         "enabled": true,
         "x": 972,
         "y": 390,
         "radius": 100
     },
+
     "exclusion_zones": [],
+
     "debug": {
         "show_confidence": true,
         "show_ids": true,
