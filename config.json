@@ -48,7 +48,7 @@
 
     "controller": {
         "type": "pico",
-        "port": "COM3",
+        "port": "COM4",
         "baudrate": 115200,
         "enabled": true
     },
