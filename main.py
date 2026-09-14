@@ -11,7 +11,7 @@ main.py
   3. 메인 루프:
        - 화면 캡처 (매 프레임)
        - ROI 크롭
-       - 템플릿 매칭 (detection_fps 주기로)
+       - 움직임 감지 + 크기 필터 (detection_fps 주기로)
        - 추적 업데이트
        - 타겟 선정
        - 공격 (cooldown 제어)
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import load_config, save_roi, Config
 from screen_capture import ScreenCapture
-from detector import TemplateDetector, MonsterDetection
+from detector import make_detector, MotionDetector, MonsterDetection
 from tracker import MonsterTracker, TrackedMonster
 from target_selector import select_target
 from controller import make_controller, BaseController
@@ -60,11 +60,7 @@ class MonsterBot:
 
         # 모듈
         self._capture   = ScreenCapture()
-        self._detector  = TemplateDetector(
-            templates_dir=os.path.join(os.path.dirname(__file__), "templates"),
-            match_threshold=self._cfg.detection.match_threshold,
-            nms_overlap_threshold=self._cfg.detection.nms_overlap_threshold
-        )
+        self._detector: MotionDetector = make_detector(self._cfg)
         self._tracker   = MonsterTracker(
             tracking_distance=self._cfg.tracking.tracking_distance,
             missing_frames_tolerance=self._cfg.tracking.missing_frames_tolerance
@@ -145,7 +141,7 @@ class MonsterBot:
         print("\n" + "="*50)
         print("  Monster Bot - v1.0  (ESC 또는 'q' 종료)")
         print("="*50)
-        print(f"  Templates: {self._detector.template_count}개")
+        print(f"  감지 모드: {self._cfg.detection.mode}")
         print(f"  ROI: {self._cfg.roi.x}, {self._cfg.roi.y}, "
               f"{self._cfg.roi.width}x{self._cfg.roi.height}")
         print(f"  Controller: {self._controller.__class__.__name__}")
@@ -213,9 +209,7 @@ class MonsterBot:
                 elif key == ord('r'):              # r → ROI 재설정
                     print("[Main] ROI 재설정...")
                     self._interactive_roi_select()
-                elif key == ord('t'):              # t → 템플릿 재로드
-                    print("[Main] 템플릿 재로드...")
-                    self._detector.reload_templates()
+                    self._detector.reset()         # 배경 히스토리 초기화
                 elif key == ord('c'):              # c → 추적 초기화
                     print("[Main] 추적 정보 초기화")
                     self._tracker.clear()

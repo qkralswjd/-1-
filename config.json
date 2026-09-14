@@ -8,17 +8,34 @@
 
     "capture": {
         "capture_fps": 30,
-        "detection_fps": 10
+        "detection_fps": 15
     },
 
     "detection": {
-        "match_threshold": 0.75,
-        "nms_overlap_threshold": 0.3
+        "mode": "motion",
+
+        "motion": {
+            "diff_threshold": 20,
+            "min_area": 800,
+            "max_area": 40000,
+            "min_width": 20,
+            "max_width": 300,
+            "min_height": 20,
+            "max_height": 300,
+            "dilate_iterations": 3,
+            "history_frames": 3,
+            "nms_overlap_threshold": 0.3
+        },
+
+        "template": {
+            "match_threshold": 0.75,
+            "nms_overlap_threshold": 0.3
+        }
     },
 
     "tracking": {
-        "tracking_distance": 80,
-        "missing_frames_tolerance": 3
+        "tracking_distance": 100,
+        "missing_frames_tolerance": 5
     },
 
     "attack": {

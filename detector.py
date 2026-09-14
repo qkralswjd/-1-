@@ -1,93 +1,93 @@
 """
 detector.py
 -----------
-템플릿 매칭 + NMS(중복 제거)만을 담당한다.
+움직임 감지(Motion Detection) + 크기 필터로 몬스터를 탐지한다.
+
+동작 원리:
+  1. 최근 N개 프레임의 평균을 배경으로 사용 (BackgroundAverager)
+  2. 현재 프레임과 배경의 차이(diff)를 계산
+  3. 임계값 이상인 픽셀을 움직임 영역으로 판단
+  4. 윤곽선(contour) 추출
+  5. 크기 필터: 너무 작거나 너무 큰 것 제거 → 노이즈 & 배경 제거
+  6. NMS로 겹치는 박스 제거
+  7. 잠깐 멈춘 몬스터 보정: 직전 프레임 탐지 결과 재활용 (missing_frames 연계)
 
 입력: ROI 이미지 (numpy BGR array)
-출력: MonsterDetection 리스트
-
-ROI 안에서만 탐지를 수행하고,
-탐지 결과의 좌표는 ROI 기준이 아닌 원본 화면 기준으로 변환해서 반환한다.
+출력: MonsterDetection 리스트 (id=-1, confidence=면적 기반)
 """
 
-import os
 import cv2
 import numpy as np
+import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional
+from collections import deque
 
 
 @dataclass
 class MonsterDetection:
     """
-    템플릿 매칭 결과 하나를 나타낸다.
+    탐지 결과 하나.
     모든 좌표는 원본 화면(전체 화면) 기준이다.
     """
-    id: int                  # 추적기가 부여하는 ID (탐지 시점에는 -1)
-    x: int                   # 바운딩 박스 좌측 상단 X (화면 기준)
-    y: int                   # 바운딩 박스 좌측 상단 Y (화면 기준)
-    width: int               # 바운딩 박스 너비
-    height: int              # 바운딩 박스 높이
-    center_x: int            # 중심 X (화면 기준)
-    center_y: int            # 중심 Y (화면 기준)
-    confidence: float        # 매칭 신뢰도 (0.0 ~ 1.0)
-    template_name: str = ""  # 어떤 템플릿에서 매칭됐는지
+    id: int
+    x: int
+    y: int
+    width: int
+    height: int
+    center_x: int
+    center_y: int
+    confidence: float        # 움직임 면적 기반 (0.0~1.0 정규화)
+    template_name: str = "motion"
 
 
-class TemplateDetector:
+class MotionDetector:
     """
-    templates/ 디렉토리의 이미지들을 로드해서
-    ROI 이미지에 대해 템플릿 매칭을 수행한다.
+    움직임 감지 기반 몬스터 탐지기.
+
+    배경 = 최근 history_frames 프레임의 평균 (rolling average)
+    diff = 현재 프레임 - 배경
+    → threshold → dilate → contours → 크기 필터 → NMS
     """
 
     def __init__(self,
-                 templates_dir: str,
-                 match_threshold: float = 0.75,
+                 diff_threshold: int = 20,
+                 min_area: int = 800,
+                 max_area: int = 40000,
+                 min_width: int = 20,
+                 max_width: int = 300,
+                 min_height: int = 20,
+                 max_height: int = 300,
+                 dilate_iterations: int = 3,
+                 history_frames: int = 3,
                  nms_overlap_threshold: float = 0.3):
-        self._templates_dir = templates_dir
-        self._match_threshold = match_threshold
+
+        self._diff_threshold = diff_threshold
+        self._min_area = min_area
+        self._max_area = max_area
+        self._min_width = min_width
+        self._max_width = max_width
+        self._min_height = min_height
+        self._max_height = max_height
+        self._dilate_iterations = dilate_iterations
         self._nms_overlap_threshold = nms_overlap_threshold
-        self._templates: List[Tuple[str, np.ndarray]] = []  # (이름, 이미지)
-        self._fps_counter_ticks: List[float] = []
+
+        # 배경 프레임 히스토리 (grayscale)
+        self._history: deque = deque(maxlen=history_frames)
+        self._background: Optional[np.ndarray] = None
+
+        # Detection FPS
+        self._fps_ticks: List[float] = []
         self._detection_fps: float = 0.0
 
-        self._load_templates()
+        # 팽창 커널
+        self._kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (5, 5))
 
-    # ------------------------------------------------------------------
-    # 템플릿 로드
-    # ------------------------------------------------------------------
-
-    def _load_templates(self):
-        """templates_dir에서 PNG/JPG 파일을 모두 로드한다."""
-        self._templates.clear()
-
-        if not os.path.isdir(self._templates_dir):
-            print(f"[Detector] 템플릿 디렉토리 없음: {self._templates_dir}")
-            return
-
-        supported = (".png", ".jpg", ".jpeg", ".bmp")
-        for fname in sorted(os.listdir(self._templates_dir)):
-            if not fname.lower().endswith(supported):
-                continue
-            path = os.path.join(self._templates_dir, fname)
-            img = cv2.imread(path)
-            if img is None:
-                print(f"[Detector] 템플릿 로드 실패: {path}")
-                continue
-            name = os.path.splitext(fname)[0]
-            self._templates.append((name, img))
-            print(f"[Detector] 템플릿 로드: {name} "
-                  f"({img.shape[1]}x{img.shape[0]}px)")
-
-        print(f"[Detector] 총 {len(self._templates)}개 템플릿 로드 완료")
-
-    def reload_templates(self):
-        """런타임 중 템플릿을 다시 로드한다."""
-        self._load_templates()
-
-    @property
-    def template_count(self) -> int:
-        return len(self._templates)
+        print(f"[Detector] MotionDetector 초기화")
+        print(f"  diff_threshold={diff_threshold}, "
+              f"area={min_area}~{max_area}, "
+              f"size={min_width}x{min_height}~{max_width}x{max_height}")
 
     # ------------------------------------------------------------------
     # 메인 탐지
@@ -99,135 +99,149 @@ class TemplateDetector:
                roi_offset_y: int) -> List[MonsterDetection]:
         """
         roi_frame: ROI 영역의 BGR 이미지
-        roi_offset_x, roi_offset_y: ROI의 화면 기준 좌측 상단 좌표
-            (탐지 결과를 화면 기준 좌표로 변환할 때 사용)
-
-        반환: 중복 제거된 MonsterDetection 리스트 (id=-1 상태)
+        roi_offset_x/y: ROI의 화면 기준 좌표 (결과 좌표 변환용)
+        반환: NMS 적용된 MonsterDetection 리스트
         """
-        import time
-        if roi_frame is None or len(self._templates) == 0:
+        if roi_frame is None:
             return []
 
-        all_detections: List[MonsterDetection] = []
+        # 그레이스케일 변환
+        gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
+        # 노이즈 제거 (가우시안 블러)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
-        for name, template in self._templates:
-            detections = self._match_single_template(
-                roi_frame, template, name, roi_offset_x, roi_offset_y
-            )
-            all_detections.extend(detections)
+        # 배경 업데이트
+        self._update_background(gray)
 
-        # NMS로 중복 제거
-        result = self._apply_nms(all_detections)
+        # 배경이 아직 준비 안 됐으면 빈 결과
+        if self._background is None:
+            return []
 
-        # Detection FPS 계산
-        now = time.time()
-        self._fps_counter_ticks.append(now)
-        if len(self._fps_counter_ticks) > 20:
-            self._fps_counter_ticks.pop(0)
-        if len(self._fps_counter_ticks) >= 2:
-            elapsed = self._fps_counter_ticks[-1] - self._fps_counter_ticks[0]
-            if elapsed > 0:
-                self._detection_fps = round(
-                    (len(self._fps_counter_ticks) - 1) / elapsed, 1)
+        # 차이 계산
+        diff = cv2.absdiff(gray, self._background)
+
+        # 임계값 적용 → 이진화
+        _, thresh = cv2.threshold(
+            diff, self._diff_threshold, 255, cv2.THRESH_BINARY)
+
+        # 팽창 (dilate): 작은 구멍 메우고 윤곽선 연결
+        dilated = cv2.dilate(
+            thresh, self._kernel,
+            iterations=self._dilate_iterations)
+
+        # 윤곽선 추출
+        contours, _ = cv2.findContours(
+            dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # 각 윤곽선 → MonsterDetection 변환 + 크기 필터
+        detections: List[MonsterDetection] = []
+        for contour in contours:
+            det = self._contour_to_detection(
+                contour, roi_offset_x, roi_offset_y)
+            if det is not None:
+                detections.append(det)
+
+        # NMS
+        result = self._apply_nms(detections)
+
+        # FPS 계산
+        self._tick_fps()
 
         return result
 
     # ------------------------------------------------------------------
-    # 단일 템플릿 매칭
+    # 배경 업데이트
     # ------------------------------------------------------------------
 
-    def _match_single_template(self,
-                                roi_frame: np.ndarray,
-                                template: np.ndarray,
-                                template_name: str,
-                                offset_x: int,
-                                offset_y: int) -> List[MonsterDetection]:
+    def _update_background(self, gray: np.ndarray):
         """
-        하나의 템플릿에 대해 cv2.matchTemplate을 수행하고
-        threshold 이상인 모든 위치를 MonsterDetection으로 반환한다.
-        (이 단계에서는 아직 NMS를 적용하지 않는다)
+        히스토리에 현재 프레임을 추가하고
+        평균을 배경으로 설정한다.
         """
-        roi_h, roi_w = roi_frame.shape[:2]
-        tmpl_h, tmpl_w = template.shape[:2]
+        self._history.append(gray.astype(np.float32))
 
-        # 템플릿이 ROI보다 크면 탐지 불가
-        if tmpl_h > roi_h or tmpl_w > roi_w:
-            return []
+        if len(self._history) < 2:
+            return
 
-        try:
-            # TM_CCOEFF_NORMED: 조명 변화에 비교적 강한 방식
-            result = cv2.matchTemplate(roi_frame, template, cv2.TM_CCOEFF_NORMED)
-        except cv2.error as e:
-            print(f"[Detector] matchTemplate 오류 ({template_name}): {e}")
-            return []
-
-        # threshold 이상인 모든 위치 추출
-        locations = np.where(result >= self._match_threshold)
-        detections: List[MonsterDetection] = []
-
-        for pt_y, pt_x in zip(*locations):
-            confidence = float(result[pt_y, pt_x])
-            # ROI 기준 → 화면 기준 변환
-            screen_x = int(pt_x) + offset_x
-            screen_y = int(pt_y) + offset_y
-            center_x = screen_x + tmpl_w // 2
-            center_y = screen_y + tmpl_h // 2
-
-            detections.append(MonsterDetection(
-                id=-1,
-                x=screen_x,
-                y=screen_y,
-                width=tmpl_w,
-                height=tmpl_h,
-                center_x=center_x,
-                center_y=center_y,
-                confidence=confidence,
-                template_name=template_name
-            ))
-
-        return detections
+        # 히스토리 평균 → 배경
+        stack = np.stack(list(self._history), axis=0)
+        self._background = np.mean(stack, axis=0).astype(np.uint8)
 
     # ------------------------------------------------------------------
-    # NMS (Non-Maximum Suppression)
+    # 윤곽선 → Detection 변환 + 크기 필터
+    # ------------------------------------------------------------------
+
+    def _contour_to_detection(self,
+                               contour,
+                               offset_x: int,
+                               offset_y: int) -> Optional[MonsterDetection]:
+        """
+        윤곽선 하나를 MonsterDetection으로 변환한다.
+        크기 조건을 만족하지 않으면 None을 반환한다.
+        """
+        area = cv2.contourArea(contour)
+        if area < self._min_area or area > self._max_area:
+            return None
+
+        rx, ry, rw, rh = cv2.boundingRect(contour)
+
+        # 크기 필터
+        if rw < self._min_width or rw > self._max_width:
+            return None
+        if rh < self._min_height or rh > self._max_height:
+            return None
+
+        # 화면 기준 좌표 변환
+        screen_x = rx + offset_x
+        screen_y = ry + offset_y
+        center_x = screen_x + rw // 2
+        center_y = screen_y + rh // 2
+
+        # confidence = 면적을 max_area로 정규화 (0~1)
+        confidence = min(area / self._max_area, 1.0)
+
+        return MonsterDetection(
+            id=-1,
+            x=screen_x,
+            y=screen_y,
+            width=rw,
+            height=rh,
+            center_x=center_x,
+            center_y=center_y,
+            confidence=round(confidence, 3),
+            template_name="motion"
+        )
+
+    # ------------------------------------------------------------------
+    # NMS
     # ------------------------------------------------------------------
 
     def _apply_nms(self, detections: List[MonsterDetection]) -> List[MonsterDetection]:
-        """
-        OpenCV의 groupRectangles와 유사한 방식으로
-        겹치는 바운딩 박스를 제거한다.
-
-        IoU(Intersection over Union) 기반으로 구현한다.
-        confidence가 높은 것을 우선 유지한다.
-        """
+        """confidence 내림차순 정렬 후 IoU 기반 중복 제거."""
         if not detections:
             return []
 
-        # confidence 내림차순 정렬
         detections = sorted(detections, key=lambda d: d.confidence, reverse=True)
-
         kept: List[MonsterDetection] = []
 
         for det in detections:
-            is_duplicate = False
-            for kept_det in kept:
-                iou = self._calc_iou(det, kept_det)
-                if iou > self._nms_overlap_threshold:
-                    is_duplicate = True
+            duplicate = False
+            for k in kept:
+                if self._calc_iou(det, k) > self._nms_overlap_threshold:
+                    duplicate = True
                     break
-            if not is_duplicate:
+            if not duplicate:
                 kept.append(det)
 
         return kept
 
     @staticmethod
     def _calc_iou(a: MonsterDetection, b: MonsterDetection) -> float:
-        """두 바운딩 박스의 IoU를 계산한다."""
         ax1, ay1 = a.x, a.y
         ax2, ay2 = a.x + a.width, a.y + a.height
         bx1, by1 = b.x, b.y
         bx2, by2 = b.x + b.width, b.y + b.height
 
-        # 교차 영역
         ix1 = max(ax1, bx1)
         iy1 = max(ay1, by1)
         ix2 = min(ax2, bx2)
@@ -236,16 +250,78 @@ class TemplateDetector:
         if ix2 <= ix1 or iy2 <= iy1:
             return 0.0
 
-        intersection = (ix2 - ix1) * (iy2 - iy1)
-        area_a = a.width * a.height
-        area_b = b.width * b.height
-        union = area_a + area_b - intersection
+        inter = (ix2 - ix1) * (iy2 - iy1)
+        union = a.width * a.height + b.width * b.height - inter
+        return inter / union if union > 0 else 0.0
 
-        if union <= 0:
-            return 0.0
+    # ------------------------------------------------------------------
+    # 배경 리셋 (ROI 변경 시 호출)
+    # ------------------------------------------------------------------
 
-        return intersection / union
+    def reset(self):
+        """배경 히스토리를 초기화한다. ROI가 바뀌었을 때 호출한다."""
+        self._history.clear()
+        self._background = None
+        print("[Detector] 배경 히스토리 초기화")
+
+    # ------------------------------------------------------------------
+    # FPS
+    # ------------------------------------------------------------------
+
+    def _tick_fps(self):
+        now = time.time()
+        self._fps_ticks.append(now)
+        if len(self._fps_ticks) > 30:
+            self._fps_ticks.pop(0)
+        if len(self._fps_ticks) >= 2:
+            elapsed = self._fps_ticks[-1] - self._fps_ticks[0]
+            if elapsed > 0:
+                self._detection_fps = round(
+                    (len(self._fps_ticks) - 1) / elapsed, 1)
 
     @property
     def detection_fps(self) -> float:
         return self._detection_fps
+
+    # ------------------------------------------------------------------
+    # 디버그용: 마스크 이미지 반환
+    # ------------------------------------------------------------------
+
+    def get_debug_mask(self,
+                       roi_frame: np.ndarray) -> Optional[np.ndarray]:
+        """
+        현재 움직임 마스크를 BGR 이미지로 반환한다.
+        디버그 창에 추가로 표시할 때 사용한다.
+        """
+        if roi_frame is None or self._background is None:
+            return None
+
+        gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        diff = cv2.absdiff(gray, self._background)
+        _, thresh = cv2.threshold(
+            diff, self._diff_threshold, 255, cv2.THRESH_BINARY)
+        dilated = cv2.dilate(
+            thresh, self._kernel, iterations=self._dilate_iterations)
+        return cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
+
+
+# ------------------------------------------------------------------
+# Factory: config에 따라 적절한 Detector 생성
+# ------------------------------------------------------------------
+
+def make_detector(cfg) -> MotionDetector:
+    """config를 보고 적절한 Detector를 생성해서 반환한다."""
+    m = cfg.detection.motion
+    return MotionDetector(
+        diff_threshold=m.diff_threshold,
+        min_area=m.min_area,
+        max_area=m.max_area,
+        min_width=m.min_width,
+        max_width=m.max_width,
+        min_height=m.min_height,
+        max_height=m.max_height,
+        dilate_iterations=m.dilate_iterations,
+        history_frames=m.history_frames,
+        nms_overlap_threshold=m.nms_overlap_threshold,
+    )

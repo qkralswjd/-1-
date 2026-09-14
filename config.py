@@ -2,13 +2,11 @@
 config.py
 ---------
 설정 파일(config.json) 로드 및 저장을 담당한다.
-런타임 중 ROI 변경 등을 저장할 때도 이 모듈을 사용한다.
 """
 
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
@@ -24,19 +22,42 @@ class ROIConfig:
 @dataclass
 class CaptureConfig:
     capture_fps: int = 30
-    detection_fps: int = 10
+    detection_fps: int = 15
 
 
 @dataclass
-class DetectionConfig:
+class MotionConfig:
+    """움직임 감지 설정."""
+    diff_threshold: int = 20          # 픽셀 밝기 차이 임계값 (낮을수록 예민)
+    min_area: int = 800               # 움직임 최소 면적 (px²) - 노이즈 제거
+    max_area: int = 40000             # 움직임 최대 면적 (px²) - 큰 배경 제거
+    min_width: int = 20               # 바운딩박스 최소 너비
+    max_width: int = 300              # 바운딩박스 최대 너비
+    min_height: int = 20              # 바운딩박스 최소 높이
+    max_height: int = 300             # 바운딩박스 최대 높이
+    dilate_iterations: int = 3        # 팽창 반복 횟수 (윤곽선 연결)
+    history_frames: int = 3           # 배경 비교에 사용할 프레임 수
+    nms_overlap_threshold: float = 0.3
+
+
+@dataclass
+class TemplateConfig:
+    """템플릿 매칭 설정 (현재 미사용, 나중을 위해 유지)."""
     match_threshold: float = 0.75
     nms_overlap_threshold: float = 0.3
 
 
 @dataclass
+class DetectionConfig:
+    mode: str = "motion"              # "motion" 또는 "template"
+    motion: MotionConfig = field(default_factory=MotionConfig)
+    template: TemplateConfig = field(default_factory=TemplateConfig)
+
+
+@dataclass
 class TrackingConfig:
-    tracking_distance: int = 80
-    missing_frames_tolerance: int = 3
+    tracking_distance: int = 100
+    missing_frames_tolerance: int = 5
 
 
 @dataclass
@@ -79,35 +100,9 @@ class Config:
     debug: DebugConfig = field(default_factory=DebugConfig)
 
 
-def _dict_to_dataclass(cls, data: dict):
-    """dict를 dataclass로 재귀 변환한다."""
-    import dataclasses
-    if not dataclasses.is_dataclass(cls):
-        return data
-    fieldtypes = {f.name: f.type for f in dataclasses.fields(cls)}
-    kwargs = {}
-    for key, val in data.items():
-        if key in fieldtypes:
-            # 타입 힌트가 문자열인 경우 eval 없이 처리
-            field_cls = cls.__dataclass_fields__[key].default_factory
-            # 중첩 dataclass 처리
-            import sys
-            module = sys.modules[cls.__module__]
-            nested_cls = getattr(module, cls.__dataclass_fields__[key].type
-                                 if isinstance(cls.__dataclass_fields__[key].type, str)
-                                 else cls.__dataclass_fields__[key].type.__name__,
-                                 None)
-            if nested_cls and hasattr(nested_cls, '__dataclass_fields__') and isinstance(val, dict):
-                kwargs[key] = _dict_to_dataclass(nested_cls, val)
-            else:
-                kwargs[key] = val
-    return cls(**kwargs)
-
-
 def load_config(path: str = CONFIG_PATH) -> Config:
-    """JSON 파일에서 설정을 로드한다. 파일이 없으면 기본값을 반환한다."""
     if not os.path.exists(path):
-        print(f"[Config] 설정 파일을 찾을 수 없습니다. 기본값을 사용합니다: {path}")
+        print(f"[Config] 설정 파일 없음 → 기본값 사용: {path}")
         return Config()
 
     try:
@@ -115,12 +110,20 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             data = json.load(f)
 
         cfg = Config()
+
         if "roi" in data:
             cfg.roi = ROIConfig(**data["roi"])
         if "capture" in data:
             cfg.capture = CaptureConfig(**data["capture"])
         if "detection" in data:
-            cfg.detection = DetectionConfig(**data["detection"])
+            d = data["detection"]
+            motion_cfg = MotionConfig(**(d.get("motion", {})))
+            template_cfg = TemplateConfig(**(d.get("template", {})))
+            cfg.detection = DetectionConfig(
+                mode=d.get("mode", "motion"),
+                motion=motion_cfg,
+                template=template_cfg
+            )
         if "tracking" in data:
             cfg.tracking = TrackingConfig(**data["tracking"])
         if "attack" in data:
@@ -141,7 +144,6 @@ def load_config(path: str = CONFIG_PATH) -> Config:
 
 
 def save_config(cfg: Config, path: str = CONFIG_PATH) -> None:
-    """현재 설정을 JSON 파일에 저장한다."""
     import dataclasses
     data = dataclasses.asdict(cfg)
     try:
@@ -154,7 +156,6 @@ def save_config(cfg: Config, path: str = CONFIG_PATH) -> None:
 
 def save_roi(cfg: Config, x: int, y: int, width: int, height: int,
              path: str = CONFIG_PATH) -> None:
-    """ROI만 업데이트해서 저장한다. 마우스 드래그로 ROI 지정 후 호출한다."""
     cfg.roi.x = x
     cfg.roi.y = y
     cfg.roi.width = width
