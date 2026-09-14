@@ -108,6 +108,24 @@ class DebugConfig:
 
 
 @dataclass
+class HuntConfig:
+    """자동 사냥 설정."""
+    # 이동 클릭 가능 범위 (화면 좌표)
+    move_x_min: int = 600
+    move_x_max: int = 1300
+    move_y_min: int = 300
+    move_y_max: int = 600
+    # 타이밍
+    move_wait_sec: float = 1.5          # 이동 후 멈춤 대기 시간
+    attack_cooldown_sec: float = 0.5    # 공격 쿨다운
+    no_monster_timeout_sec: float = 3.0 # 몬스터 없으면 N초 후 이동
+    # 드래그 설정 (자동공격용)
+    drag_dx: int = 5                    # 드래그 x 거리
+    drag_dy: int = 0                    # 드래그 y 거리
+    drag_hold_ms: int = 80              # 클릭 유지 시간(ms)
+
+
+@dataclass
 class MovementConfig:
     """이동/멈춤 감지 설정."""
     move_threshold: float = 20.0     # 이 값 이상이면 이동 중 판정
@@ -128,6 +146,7 @@ class Config:
     exclusion_zones: list = field(default_factory=list)
     debug: DebugConfig = field(default_factory=DebugConfig)
     movement: MovementConfig = field(default_factory=MovementConfig)
+    hunt: HuntConfig = field(default_factory=HuntConfig)
 
 
 def load_config(path: str = CONFIG_PATH) -> Config:
@@ -165,6 +184,8 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             cfg.debug = DebugConfig(**data["debug"])
         if "movement" in data:
             cfg.movement = MovementConfig(**data["movement"])
+        if "hunt" in data:
+            cfg.hunt = HuntConfig(**data["hunt"])
         print(f"[Config] 로드 완료: mode={cfg.detection.mode}, "
               f"threshold={cfg.detection.motion.diff_threshold}, "
               f"match={cfg.detection.template.match_threshold}")

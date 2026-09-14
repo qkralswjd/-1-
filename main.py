@@ -241,7 +241,9 @@ class MonsterBot:
                     player_exclusion=self._cfg.player_exclusion,
                     exclusion_zones=self._cfg.exclusion_zones,
                     screen_change=self._move_detector.last_change,
-                    move_threshold=self._cfg.movement.move_threshold
+                    move_threshold=self._cfg.movement.move_threshold,
+                    bot_enabled=self._hunter.enabled,
+                    bot_state=self._hunter.state
                 )
 
                 cv2.imshow(window_name, debug_frame)
@@ -264,6 +266,8 @@ class MonsterBot:
                     self._state = STATE_SEARCHING
                 elif key == ord('p'):              # p → 일시정지 토글
                     self._pause()
+                elif key == ord('b') or key == ord('B'):  # b → 자동사냥 ON/OFF
+                    self._toggle_bot()
 
                 # ── 8. FPS 제한 ───────────────────────────────────────────
                 elapsed = time.time() - loop_start
@@ -461,6 +465,15 @@ class MonsterBot:
     # ------------------------------------------------------------------
     # 일시정지
     # ------------------------------------------------------------------
+
+    def _toggle_bot(self):
+        """'b' 키로 자동사냥 ON/OFF 토글."""
+        if self._hunter.enabled:
+            self._hunter.disable()
+            print("[Main] 자동사냥 OFF")
+        else:
+            self._hunter.enable()
+            print("[Main] 자동사냥 ON")
 
     def _pause(self):
         """'p' 키 입력 시 일시정지. 다시 'p'를 누르면 재개."""

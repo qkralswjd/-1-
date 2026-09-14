@@ -72,7 +72,9 @@ class Overlay:
              player_exclusion=None,
              exclusion_zones=None,
              screen_change: float = 0.0,
-             move_threshold: float = 20.0) -> np.ndarray:
+             move_threshold: float = 20.0,
+             bot_enabled: bool = False,
+             bot_state: str = "") -> np.ndarray:
         """
         frame에 모든 디버그 정보를 그려서 반환한다.
         원본 frame을 수정하지 않고 복사본에 그린다.
@@ -118,7 +120,8 @@ class Overlay:
         # 4. HUD (FPS, 상태, 몬스터 목록)
         if self._show_fps:
             self._draw_hud(out, monsters, target, capture_fps, detection_fps,
-                          state, screen_change, move_threshold)
+                          state, screen_change, move_threshold,
+                          bot_enabled, bot_state)
 
         return out
 
@@ -195,12 +198,18 @@ class Overlay:
                   detection_fps: float,
                   state: str,
                   screen_change: float = 0.0,
-                  move_threshold: float = 20.0):
+                  move_threshold: float = 20.0,
+                  bot_enabled: bool = False,
+                  bot_state: str = ""):
         """화면 좌상단에 FPS, 상태, 몬스터 목록을 표시한다."""
         # 이동/멈춤 상태 색상
         is_moving = (state == "MOVING")
         move_color = (0, 80, 255) if is_moving else (0, 220, 80)  # 빨강 or 초록
         move_label = ">> MOVING <<" if is_moving else "** DETECTING **"
+
+        # 자동사냥 ON/OFF 표시
+        bot_label = f"[BOT: ON | {bot_state}]" if bot_enabled else "[BOT: OFF]"
+        bot_color = (0, 255, 180) if bot_enabled else (100, 100, 100)
 
         lines = []
         lines.append(f"FPS: {capture_fps:.1f}  Det FPS: {detection_fps:.1f}")
@@ -236,6 +245,13 @@ class Overlay:
                         fw - 180, 24,
                         font_scale=FONT_SCALE_LARGE,
                         text_color=move_color,
+                        with_bg=True)
+
+        # 자동사냥 BOT 상태 표시 (우상단 아래)
+        self._put_label(frame, bot_label,
+                        fw - 220, 50,
+                        font_scale=FONT_SCALE_NORM,
+                        text_color=bot_color,
                         with_bg=True)
 
     # ------------------------------------------------------------------

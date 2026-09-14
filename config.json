@@ -67,6 +67,19 @@
 
     "exclusion_zones": [],
 
+    "hunt": {
+        "move_x_min": 600,
+        "move_x_max": 1300,
+        "move_y_min": 300,
+        "move_y_max": 600,
+        "move_wait_sec": 1.5,
+        "attack_cooldown_sec": 0.5,
+        "no_monster_timeout_sec": 3.0,
+        "drag_dx": 5,
+        "drag_dy": 0,
+        "drag_hold_ms": 80
+    },
+
     "movement": {
         "move_threshold": 20.0,
         "still_frames_required": 3,

@@ -83,6 +83,14 @@ class DummyController(BaseController):
         self._attack_count += 1
         print(f"[DummyController] 공격 #{self._attack_count}: ({x}, {y})")
 
+    def click_drag(self, x: int, y: int, drag_dx: int = 5, drag_dy: int = 0, hold_ms: int = 100):
+        """클릭 드래그 (자동공격용) - Dummy는 로그만 출력."""
+        print(f"[DummyController] 클릭드래그: ({x},{y}) → dx={drag_dx} hold={hold_ms}ms")
+
+    def click_move(self, x: int, y: int):
+        """바닥 클릭 이동 - Dummy는 로그만 출력."""
+        print(f"[DummyController] 이동클릭: ({x}, {y})")
+
     @property
     def is_connected(self) -> bool:
         return self._connected
@@ -143,14 +151,32 @@ class PicoController(BaseController):
     def attack(self, x: int, y: int):
         """
         지정 좌표에 마우스 클릭을 전송한다.
-        Pico는 상대 좌표(HID report)를 기대하므로
-        절대 좌표를 전송하고 펌웨어 측에서 변환한다.
+        """
+        cmd = {"cmd": "click", "x": x, "y": y, "btn": "left"}
+        self._send(cmd)
+
+    def click_drag(self, x: int, y: int, drag_dx: int = 5, drag_dy: int = 0, hold_ms: int = 100):
+        """
+        몬스터 좌표에 클릭 드래그 → 자동공격 발동.
+        1) mousedown (x, y)
+        2) hold_ms 대기
+        3) 살짝 drag (x+drag_dx, y+drag_dy)
+        4) mouseup
+        """
+        self._send({"cmd": "mousedown", "x": x, "y": y, "btn": "left"})
+        time.sleep(hold_ms / 1000.0)
+        self._send({"cmd": "mouseup", "x": x + drag_dx, "y": y + drag_dy, "btn": "left"})
+
+    def click_move(self, x: int, y: int):
+        """
+        바닥 좌표 클릭 → 캐릭터 이동.
+        단순 클릭 1회.
         """
         cmd = {"cmd": "click", "x": x, "y": y, "btn": "left"}
         self._send(cmd)
 
     def move(self, x: int, y: int):
-        """마우스 이동만 전송한다."""
+        """마우스 커서 이동만 전송한다 (클릭 없음)."""
         cmd = {"cmd": "move", "x": x, "y": y}
         self._send(cmd)
 
