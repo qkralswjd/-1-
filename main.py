@@ -97,6 +97,10 @@ class MonsterBot:
         self._detection_interval  = 1.0 / self._cfg.capture.detection_fps
         self._attack_cooldown     = self._cfg.attack.attack_cooldown
 
+        # 탐지 결과 캐시 (템플릿 탐지는 비쌈 → 결과 재사용)
+        self._cached_monsters: list = []
+        self._need_redetect: bool = True  # True면 다음 루프에서 탐지 실행
+
     # ------------------------------------------------------------------
     # ROI 설정
     # ------------------------------------------------------------------
@@ -185,22 +189,27 @@ class MonsterBot:
                 is_moving = self._move_detector.update(frame)
 
                 if is_moving:
-                    # 이동 중 → 탐지 스킵, 추적 초기화
+                    # 이동 중 → 탐지 스킵, 캐시 초기화
                     if self._state != STATE_MOVING:
                         print("[Bot] 이동 감지 → 탐지 중단")
                         self._tracker.clear()
                         self._target = None
                         monsters = []
+                        self._cached_monsters = []
+                        self._need_redetect = True
                         self._detector.reset()
                     self._state = STATE_MOVING
                 else:
-                    # ── 3. 멈춤 → 탐지 실행 (detection_fps 주기로) ────────
+                    # ── 3. 멈춤 → 탐지 실행 ──────────────────────────────
                     if self._state == STATE_MOVING:
                         print("[Bot] 멈춤 감지 → 탐지 시작")
                         self._state = STATE_SEARCHING
+                        self._need_redetect = True  # 멈추면 반드시 재탐지
 
                     now = time.time()
-                    if now - self._last_detection_time >= self._detection_interval:
+                    # 재탐지 필요할 때만 실행 (캐시 있으면 스킵)
+                    if self._need_redetect and \
+                       now - self._last_detection_time >= self._detection_interval:
                         roi_frame = self._capture.crop_roi(
                             frame, roi.x, roi.y, roi.width, roi.height
                         )
@@ -210,20 +219,22 @@ class MonsterBot:
                                 roi_offset_x=roi.x,
                                 roi_offset_y=roi.y
                             )
-                            # 고정 제외 영역 (나무 등)
                             if self._cfg.exclusion_zones:
                                 detections = self._detector.filter_zones(
                                     detections, self._cfg.exclusion_zones
                                 )
-                            # 플레이어 위치 제외
                             pe = self._cfg.player_exclusion
                             if pe.enabled:
                                 detections = self._detector.filter_player(
                                     detections, pe.x, pe.y, pe.radius
                                 )
-                            # ── 추적 업데이트 ─────────────────────────────
                             monsters = self._tracker.update(detections)
+                            self._cached_monsters = monsters
+                            self._need_redetect = False  # 캐시 완료
                         self._last_detection_time = now
+                    else:
+                        # 캐시된 결과 재사용 (탐지 스킵 → FPS 유지)
+                        monsters = self._cached_monsters
 
                 # ── 4. 상태 전환 및 타겟 선정 ─────────────────────────────
                 self._update_state(monsters)
@@ -323,8 +334,10 @@ class MonsterBot:
                 self._state = STATE_SEARCHING
 
         elif self._state == STATE_TARGET_LOST:
-            # 타겟 초기화 후 다시 탐색
+            # 타겟 초기화 후 다시 탐색 → 재탐지 트리거
             self._target = None
+            self._cached_monsters = []
+            self._need_redetect = True
             self._state = STATE_SEARCHING
 
     # ------------------------------------------------------------------
