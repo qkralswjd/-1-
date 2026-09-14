@@ -39,7 +39,7 @@ class TrackedMonster:
     # 이동 거리 추적 (나무/배경 오탐지 필터용)
     # 최근 N프레임의 중심점 기록
     _position_history: Deque = field(
-        default_factory=lambda: deque(maxlen=12), repr=False)
+        default_factory=lambda: deque(maxlen=20), repr=False)
     # 총 누적 이동 거리
     _total_movement: float = field(default=0.0, repr=False)
     # 이동 확인 완료 여부 (한번 이동 확인되면 계속 유지)
@@ -66,8 +66,8 @@ class TrackedMonster:
         self._total_movement += move
         self._position_history.append((det.center_x, det.center_y))
 
-        # 한번이라도 충분히 움직이면 confirmed
-        if move >= 8:
+        # 한번이라도 충분히 움직이면 confirmed (20px = 확실한 이동)
+        if move >= 20:
             self._confirmed_moving = True
 
     def mark_missing(self):
@@ -84,11 +84,13 @@ class TrackedMonster:
         """
         if self._confirmed_moving:
             return False
-        # age 10 이상 쌓였을 때만 판단 (초반엔 아직 모름)
-        if self.age < 10:
+        # age 20 이상 쌓였을 때만 판단
+        if self.age < 20:
             return False
-        # 10프레임 동안 총 이동거리가 15px 미만 = 정적
-        return self._total_movement < 15.0
+        # 20프레임 동안 총 이동거리가 60px 미만 = 정적 (나무)
+        # 나무는 흔들려도 실제 이동은 거의 없음
+        # 몬스터는 20프레임(약 1.3초)이면 최소 60px 이상 이동
+        return self._total_movement < 80.0
 
     @property
     def is_active(self) -> bool:
