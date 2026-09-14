@@ -15,7 +15,7 @@
         "mode": "motion",
 
         "motion": {
-            "diff_threshold": 55,
+            "diff_threshold": 58,
             "min_area": 4000,
             "max_area": 35000,
             "min_width": 50,
