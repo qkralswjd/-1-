@@ -70,7 +70,9 @@ class Overlay:
              detection_fps: float,
              state: str = "",
              player_exclusion=None,
-             exclusion_zones=None) -> np.ndarray:
+             exclusion_zones=None,
+             screen_change: float = 0.0,
+             move_threshold: float = 20.0) -> np.ndarray:
         """
         frame에 모든 디버그 정보를 그려서 반환한다.
         원본 frame을 수정하지 않고 복사본에 그린다.
