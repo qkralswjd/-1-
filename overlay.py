@@ -69,7 +69,8 @@ class Overlay:
              capture_fps: float,
              detection_fps: float,
              state: str = "",
-             player_exclusion=None) -> np.ndarray:
+             player_exclusion=None,
+             exclusion_zones=None) -> np.ndarray:
         """
         frame에 모든 디버그 정보를 그려서 반환한다.
         원본 frame을 수정하지 않고 복사본에 그린다.
@@ -83,7 +84,19 @@ class Overlay:
         # 2. 기준점 (플레이어 위치)
         self._draw_reference(out, ref_x, ref_y)
 
-        # 2-1. 플레이어 제외 영역
+        # 2-1. 고정 제외 영역 (나무 등) - 빨간 점선 사각형
+        if exclusion_zones:
+            for zone in exclusion_zones:
+                cv2.rectangle(out,
+                              (zone.x, zone.y),
+                              (zone.x + zone.width, zone.y + zone.height),
+                              (0, 0, 180), 1)
+                self._put_label(out, f"EXCL:{zone.name}",
+                                zone.x + 2, zone.y + 14,
+                                font_scale=FONT_SCALE_SMALL,
+                                text_color=(0, 0, 200))
+
+        # 2-2. 플레이어 제외 영역
         if player_exclusion and player_exclusion.enabled:
             cv2.circle(out,
                        (player_exclusion.x, player_exclusion.y),

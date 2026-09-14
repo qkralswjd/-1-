@@ -149,6 +149,27 @@ class MotionDetector:
 
         return result
 
+    def filter_zones(self,
+                     detections: List[MonsterDetection],
+                     zones: list) -> List[MonsterDetection]:
+        """
+        고정 제외 영역(나무 등) 안에 중심점이 있는 탐지 결과를 제거한다.
+        zones: ExclusionZone 리스트
+        """
+        if not zones:
+            return detections
+        filtered = []
+        for det in detections:
+            in_zone = False
+            for zone in zones:
+                if (zone.x <= det.center_x <= zone.x + zone.width and
+                        zone.y <= det.center_y <= zone.y + zone.height):
+                    in_zone = True
+                    break
+            if not in_zone:
+                filtered.append(det)
+        return filtered
+
     def filter_player(self,
                       detections: List[MonsterDetection],
                       player_x: int,

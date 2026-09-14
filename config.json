@@ -59,8 +59,18 @@
         "enabled": true,
         "x": 972,
         "y": 390,
-        "radius": 100
+        "radius": 160
     },
+
+    "exclusion_zones": [
+        {
+            "name": "tree_right",
+            "x": 700,
+            "y": 100,
+            "width": 200,
+            "height": 300
+        }
+    ],
 
     "debug": {
         "show_confidence": true,

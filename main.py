@@ -176,6 +176,11 @@ class MonsterBot:
                             roi_offset_x=roi.x,
                             roi_offset_y=roi.y
                         )
+                        # 고정 제외 영역 (나무 등)
+                        if self._cfg.exclusion_zones:
+                            detections = self._detector.filter_zones(
+                                detections, self._cfg.exclusion_zones
+                            )
                         # 플레이어 위치 제외
                         pe = self._cfg.player_exclusion
                         if pe.enabled:
@@ -203,7 +208,8 @@ class MonsterBot:
                     capture_fps=self._capture.fps,
                     detection_fps=self._detector.detection_fps,
                     state=self._state,
-                    player_exclusion=self._cfg.player_exclusion
+                    player_exclusion=self._cfg.player_exclusion,
+                    exclusion_zones=self._cfg.exclusion_zones
                 )
 
                 cv2.imshow(window_name, debug_frame)

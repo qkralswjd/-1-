@@ -81,6 +81,16 @@ class ReferencePoint:
 
 
 @dataclass
+class ExclusionZone:
+    """고정 제외 영역 (나무, 배경 오브젝트 등)."""
+    name: str = ""
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+
+
+@dataclass
 class PlayerExclusionConfig:
     """플레이어 위치 제외 영역 설정."""
     enabled: bool = True
@@ -107,6 +117,7 @@ class Config:
     controller: ControllerConfig = field(default_factory=ControllerConfig)
     reference_point: ReferencePoint = field(default_factory=ReferencePoint)
     player_exclusion: PlayerExclusionConfig = field(default_factory=PlayerExclusionConfig)
+    exclusion_zones: list = field(default_factory=list)
     debug: DebugConfig = field(default_factory=DebugConfig)
 
 
@@ -144,6 +155,8 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             cfg.reference_point = ReferencePoint(**data["reference_point"])
         if "player_exclusion" in data:
             cfg.player_exclusion = PlayerExclusionConfig(**data["player_exclusion"])
+        if "exclusion_zones" in data:
+            cfg.exclusion_zones = [ExclusionZone(**z) for z in data["exclusion_zones"]]
         if "debug" in data:
             cfg.debug = DebugConfig(**data["debug"])
 
