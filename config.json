@@ -16,12 +16,12 @@
 
         "motion": {
             "diff_threshold": 20,
-            "min_area": 800,
+            "min_area": 3000,
             "max_area": 40000,
-            "min_width": 20,
-            "max_width": 300,
-            "min_height": 20,
-            "max_height": 300,
+            "min_width": 40,
+            "max_width": 250,
+            "min_height": 40,
+            "max_height": 250,
             "dilate_iterations": 3,
             "history_frames": 3,
             "nms_overlap_threshold": 0.3
