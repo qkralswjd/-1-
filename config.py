@@ -7,6 +7,7 @@ config.py
 import json
 import os
 from dataclasses import dataclass, field
+from typing import List
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
@@ -27,29 +28,30 @@ class CaptureConfig:
 
 @dataclass
 class MotionConfig:
-    """움직임 감지 설정."""
-    diff_threshold: int = 20          # 픽셀 밝기 차이 임계값 (낮을수록 예민)
-    min_area: int = 800               # 움직임 최소 면적 (px²) - 노이즈 제거
-    max_area: int = 40000             # 움직임 최대 면적 (px²) - 큰 배경 제거
-    min_width: int = 20               # 바운딩박스 최소 너비
-    max_width: int = 300              # 바운딩박스 최대 너비
-    min_height: int = 20              # 바운딩박스 최소 높이
-    max_height: int = 300             # 바운딩박스 최대 높이
-    dilate_iterations: int = 3        # 팽창 반복 횟수 (윤곽선 연결)
-    history_frames: int = 3           # 배경 비교에 사용할 프레임 수
+    diff_threshold: int = 35
+    min_area: int = 1500
+    max_area: int = 40000
+    min_width: int = 30
+    max_width: int = 250
+    min_height: int = 30
+    max_height: int = 250
+    dilate_iterations: int = 2
+    history_frames: int = 5
     nms_overlap_threshold: float = 0.3
 
 
 @dataclass
 class TemplateConfig:
-    """템플릿 매칭 설정 (현재 미사용, 나중을 위해 유지)."""
-    match_threshold: float = 0.75
+    match_threshold: float = 0.72
     nms_overlap_threshold: float = 0.3
+    scales: List[float] = field(default_factory=lambda: [0.8, 1.0, 1.2])
+    fallback_to_motion: bool = False
+    padding: int = 40
 
 
 @dataclass
 class DetectionConfig:
-    mode: str = "motion"              # "motion" 또는 "template"
+    mode: str = "hybrid"
     motion: MotionConfig = field(default_factory=MotionConfig)
     template: TemplateConfig = field(default_factory=TemplateConfig)
 
@@ -82,7 +84,6 @@ class ReferencePoint:
 
 @dataclass
 class ExclusionZone:
-    """고정 제외 영역 (나무, 배경 오브젝트 등)."""
     name: str = ""
     x: int = 0
     y: int = 0
@@ -92,7 +93,6 @@ class ExclusionZone:
 
 @dataclass
 class PlayerExclusionConfig:
-    """플레이어 위치 제외 영역 설정."""
     enabled: bool = True
     x: int = 972
     y: int = 390
@@ -123,27 +123,22 @@ class Config:
 
 def load_config(path: str = CONFIG_PATH) -> Config:
     if not os.path.exists(path):
-        print(f"[Config] 설정 파일 없음 → 기본값 사용: {path}")
+        print(f"[Config] 파일 없음 → 기본값 사용")
         return Config()
-
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-
         cfg = Config()
-
         if "roi" in data:
             cfg.roi = ROIConfig(**data["roi"])
         if "capture" in data:
             cfg.capture = CaptureConfig(**data["capture"])
         if "detection" in data:
             d = data["detection"]
-            motion_cfg = MotionConfig(**(d.get("motion", {})))
-            template_cfg = TemplateConfig(**(d.get("template", {})))
             cfg.detection = DetectionConfig(
-                mode=d.get("mode", "motion"),
-                motion=motion_cfg,
-                template=template_cfg
+                mode=d.get("mode", "hybrid"),
+                motion=MotionConfig(**d.get("motion", {})),
+                template=TemplateConfig(**d.get("template", {})),
             )
         if "tracking" in data:
             cfg.tracking = TrackingConfig(**data["tracking"])
@@ -159,31 +154,28 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             cfg.exclusion_zones = [ExclusionZone(**z) for z in data["exclusion_zones"]]
         if "debug" in data:
             cfg.debug = DebugConfig(**data["debug"])
-
-        print(f"[Config] 설정 로드 완료: {path}")
+        print(f"[Config] 로드 완료: mode={cfg.detection.mode}, "
+              f"threshold={cfg.detection.motion.diff_threshold}, "
+              f"match={cfg.detection.template.match_threshold}")
         return cfg
-
     except Exception as e:
-        print(f"[Config] 설정 로드 실패: {e} → 기본값 사용")
+        print(f"[Config] 로드 실패: {e} → 기본값 사용")
+        import traceback; traceback.print_exc()
         return Config()
 
 
 def save_config(cfg: Config, path: str = CONFIG_PATH) -> None:
     import dataclasses
-    data = dataclasses.asdict(cfg)
     try:
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-        print(f"[Config] 설정 저장 완료: {path}")
+            json.dump(dataclasses.asdict(cfg), f, indent=4, ensure_ascii=False)
+        print(f"[Config] 저장 완료")
     except Exception as e:
-        print(f"[Config] 설정 저장 실패: {e}")
+        print(f"[Config] 저장 실패: {e}")
 
 
 def save_roi(cfg: Config, x: int, y: int, width: int, height: int,
              path: str = CONFIG_PATH) -> None:
-    cfg.roi.x = x
-    cfg.roi.y = y
-    cfg.roi.width = width
-    cfg.roi.height = height
+    cfg.roi.x, cfg.roi.y = x, y
+    cfg.roi.width, cfg.roi.height = width, height
     save_config(cfg, path)
-    print(f"[Config] ROI 저장: x={x}, y={y}, w={width}, h={height}")
