@@ -83,6 +83,9 @@ class MonsterBot:
             sample_scale=mv.sample_scale,
         )
 
+        # 자동사냥
+        self._hunter = AutoHunter(self._cfg)
+
         # 상태
         self._state     = STATE_MOVING
         self._target: Optional[TrackedMonster] = None
