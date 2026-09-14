@@ -8,7 +8,7 @@
 
     "capture": {
         "capture_fps": 30,
-        "detection_fps": 15
+        "detection_fps": 8
     },
 
     "detection": {
@@ -30,7 +30,7 @@
         "template": {
             "match_threshold": 0.72,
             "nms_overlap_threshold": 0.3,
-            "scales": [0.8, 1.0, 1.2],
+            "scales": [1.0],
             "fallback_to_motion": false,
             "padding": 40
         }

@@ -252,8 +252,9 @@ class TemplateDetector:
         return result
 
     def match_in_region(self, roi_frame, region_x, region_y, region_w, region_h,
-                        roi_offset_x, roi_offset_y, padding=40) -> List[MonsterDetection]:
-        """motion 후보 영역 주변에서만 템플릿 매칭 실행."""
+                        roi_offset_x, roi_offset_y, padding=40,
+                        gray_roi=None) -> List[MonsterDetection]:
+        """motion 후보 영역 주변에서만 템플릿 매칭 실행. gray_roi 캐시 활용."""
         if roi_frame is None or not self._templates:
             return []
         h_roi, w_roi = roi_frame.shape[:2]
@@ -263,8 +264,11 @@ class TemplateDetector:
         y2 = min(h_roi, region_y - roi_offset_y + region_h + padding)
         if x2 - x1 < 20 or y2 - y1 < 20:
             return []
-        crop = roi_frame[y1:y2, x1:x2]
-        gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        # 그레이스케일 캐시 활용 (HybridDetector에서 전달)
+        if gray_roi is not None:
+            gray_crop = gray_roi[y1:y2, x1:x2]
+        else:
+            gray_crop = cv2.cvtColor(roi_frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
         cx_off = roi_offset_x + x1
         cy_off = roi_offset_y + y1
         all_dets = []
@@ -357,6 +361,9 @@ class HybridDetector:
         confirmed = []
         motion_only = []
 
+        # 그레이스케일 한 번만 변환 (캐시)
+        gray_roi = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
+
         # 2. 각 후보에서 Template 확인
         if self._template.template_count > 0:
             for cand in candidates:
@@ -365,7 +372,8 @@ class HybridDetector:
                     region_x=cand.x, region_y=cand.y,
                     region_w=cand.width, region_h=cand.height,
                     roi_offset_x=roi_offset_x, roi_offset_y=roi_offset_y,
-                    padding=self._padding
+                    padding=self._padding,
+                    gray_roi=gray_roi
                 )
                 if tmpl_dets:
                     confirmed.extend(tmpl_dets)
