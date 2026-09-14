@@ -8,14 +8,14 @@
 
     "capture": {
         "capture_fps": 30,
-        "detection_fps": 8
+        "detection_fps": 15
     },
 
     "detection": {
-        "mode": "hybrid",
+        "mode": "motion",
 
         "motion": {
-            "diff_threshold": 35,
+            "diff_threshold": 45,
             "min_area": 1500,
             "max_area": 40000,
             "min_width": 30,
