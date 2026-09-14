@@ -37,6 +37,7 @@ from tracker import MonsterTracker, TrackedMonster
 from target_selector import select_target
 from controller import make_controller, BaseController
 from overlay import Overlay, ROISelector
+from screen_change_detector import ScreenChangeDetector
 
 
 # ------------------------------------------------------------------
@@ -46,6 +47,7 @@ STATE_SEARCHING        = "SEARCHING"
 STATE_TARGET_SELECTED  = "TARGET_SELECTED"
 STATE_ATTACKING        = "ATTACKING"
 STATE_TARGET_LOST      = "TARGET_LOST"
+STATE_MOVING           = "MOVING"
 
 
 class MonsterBot:
@@ -73,8 +75,16 @@ class MonsterBot:
         )
         self._controller: BaseController = make_controller(self._cfg)
 
+        # 이동/멈춤 감지기
+        mv = self._cfg.movement
+        self._move_detector = ScreenChangeDetector(
+            move_threshold=mv.move_threshold,
+            still_frames_required=mv.still_frames_required,
+            sample_scale=mv.sample_scale,
+        )
+
         # 상태
-        self._state     = STATE_SEARCHING
+        self._state     = STATE_MOVING
         self._target: Optional[TrackedMonster] = None
 
         # 타이밍 제어
@@ -145,6 +155,9 @@ class MonsterBot:
         print(f"  ROI: {self._cfg.roi.x}, {self._cfg.roi.y}, "
               f"{self._cfg.roi.width}x{self._cfg.roi.height}")
         print(f"  Controller: {self._controller.__class__.__name__}")
+        mv = self._cfg.movement
+        print(f"  이동감지: threshold={mv.move_threshold}, "
+              f"still={mv.still_frames_required}frames")
         print("="*50 + "\n")
 
         window_name = "Monster Bot - Debug"
@@ -164,32 +177,49 @@ class MonsterBot:
 
                 roi = self._cfg.roi
 
-                # ── 2. 탐지 (detection_fps 주기로만 실행) ─────────────────
-                now = time.time()
-                if now - self._last_detection_time >= self._detection_interval:
-                    roi_frame = self._capture.crop_roi(
-                        frame, roi.x, roi.y, roi.width, roi.height
-                    )
-                    if roi_frame is not None:
-                        detections = self._detector.detect(
-                            roi_frame,
-                            roi_offset_x=roi.x,
-                            roi_offset_y=roi.y
+                # ── 2. 이동/멈춤 감지 ──────────────────────────────────
+                is_moving = self._move_detector.update(frame)
+
+                if is_moving:
+                    # 이동 중 → 탐지 스킵, 추적 초기화
+                    if self._state != STATE_MOVING:
+                        print("[Bot] 이동 감지 → 탐지 중단")
+                        self._tracker.clear()
+                        self._target = None
+                        monsters = []
+                        self._detector.reset()
+                    self._state = STATE_MOVING
+                else:
+                    # ── 3. 멈춤 → 탐지 실행 (detection_fps 주기로) ────────
+                    if self._state == STATE_MOVING:
+                        print("[Bot] 멈춤 감지 → 탐지 시작")
+                        self._state = STATE_SEARCHING
+
+                    now = time.time()
+                    if now - self._last_detection_time >= self._detection_interval:
+                        roi_frame = self._capture.crop_roi(
+                            frame, roi.x, roi.y, roi.width, roi.height
                         )
-                        # 고정 제외 영역 (나무 등)
-                        if self._cfg.exclusion_zones:
-                            detections = self._detector.filter_zones(
-                                detections, self._cfg.exclusion_zones
+                        if roi_frame is not None:
+                            detections = self._detector.detect(
+                                roi_frame,
+                                roi_offset_x=roi.x,
+                                roi_offset_y=roi.y
                             )
-                        # 플레이어 위치 제외
-                        pe = self._cfg.player_exclusion
-                        if pe.enabled:
-                            detections = self._detector.filter_player(
-                                detections, pe.x, pe.y, pe.radius
-                            )
-                        # ── 3. 추적 업데이트 ──────────────────────────────
-                        monsters = self._tracker.update(detections)
-                    self._last_detection_time = now
+                            # 고정 제외 영역 (나무 등)
+                            if self._cfg.exclusion_zones:
+                                detections = self._detector.filter_zones(
+                                    detections, self._cfg.exclusion_zones
+                                )
+                            # 플레이어 위치 제외
+                            pe = self._cfg.player_exclusion
+                            if pe.enabled:
+                                detections = self._detector.filter_player(
+                                    detections, pe.x, pe.y, pe.radius
+                                )
+                            # ── 추적 업데이트 ─────────────────────────────
+                            monsters = self._tracker.update(detections)
+                        self._last_detection_time = now
 
                 # ── 4. 상태 전환 및 타겟 선정 ─────────────────────────────
                 self._update_state(monsters)
@@ -209,7 +239,9 @@ class MonsterBot:
                     detection_fps=self._detector.detection_fps,
                     state=self._state,
                     player_exclusion=self._cfg.player_exclusion,
-                    exclusion_zones=self._cfg.exclusion_zones
+                    exclusion_zones=self._cfg.exclusion_zones,
+                    screen_change=self._move_detector.last_change,
+                    move_threshold=self._cfg.movement.move_threshold
                 )
 
                 cv2.imshow(window_name, debug_frame)

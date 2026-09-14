@@ -67,6 +67,12 @@
 
     "exclusion_zones": [],
 
+    "movement": {
+        "move_threshold": 20.0,
+        "still_frames_required": 3,
+        "sample_scale": 0.25
+    },
+
     "debug": {
         "show_confidence": true,
         "show_ids": true,

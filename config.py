@@ -108,6 +108,14 @@ class DebugConfig:
 
 
 @dataclass
+class MovementConfig:
+    """이동/멈춤 감지 설정."""
+    move_threshold: float = 20.0     # 이 값 이상이면 이동 중 판정
+    still_frames_required: int = 3   # N프레임 연속 멈춤이어야 탐지 시작
+    sample_scale: float = 0.25       # 비교 프레임 축소 비율 (빠른 연산)
+
+
+@dataclass
 class Config:
     roi: ROIConfig = field(default_factory=ROIConfig)
     capture: CaptureConfig = field(default_factory=CaptureConfig)
@@ -119,6 +127,7 @@ class Config:
     player_exclusion: PlayerExclusionConfig = field(default_factory=PlayerExclusionConfig)
     exclusion_zones: list = field(default_factory=list)
     debug: DebugConfig = field(default_factory=DebugConfig)
+    movement: MovementConfig = field(default_factory=MovementConfig)
 
 
 def load_config(path: str = CONFIG_PATH) -> Config:
@@ -154,6 +163,8 @@ def load_config(path: str = CONFIG_PATH) -> Config:
             cfg.exclusion_zones = [ExclusionZone(**z) for z in data["exclusion_zones"]]
         if "debug" in data:
             cfg.debug = DebugConfig(**data["debug"])
+        if "movement" in data:
+            cfg.movement = MovementConfig(**data["movement"])
         print(f"[Config] 로드 완료: mode={cfg.detection.mode}, "
               f"threshold={cfg.detection.motion.diff_threshold}, "
               f"match={cfg.detection.template.match_threshold}")

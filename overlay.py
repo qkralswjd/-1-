@@ -115,7 +115,8 @@ class Overlay:
 
         # 4. HUD (FPS, 상태, 몬스터 목록)
         if self._show_fps:
-            self._draw_hud(out, monsters, target, capture_fps, detection_fps, state)
+            self._draw_hud(out, monsters, target, capture_fps, detection_fps,
+                          state, screen_change, move_threshold)
 
         return out
 
@@ -190,10 +191,18 @@ class Overlay:
                   target: Optional[TrackedMonster],
                   capture_fps: float,
                   detection_fps: float,
-                  state: str):
+                  state: str,
+                  screen_change: float = 0.0,
+                  move_threshold: float = 20.0):
         """화면 좌상단에 FPS, 상태, 몬스터 목록을 표시한다."""
+        # 이동/멈춤 상태 색상
+        is_moving = (state == "MOVING")
+        move_color = (0, 80, 255) if is_moving else (0, 220, 80)  # 빨강 or 초록
+        move_label = ">> MOVING <<" if is_moving else "** DETECTING **"
+
         lines = []
         lines.append(f"FPS: {capture_fps:.1f}  Det FPS: {detection_fps:.1f}")
+        lines.append(f"Change: {screen_change:.1f} / thr:{move_threshold:.0f}")
         lines.append(f"State: {state}")
         lines.append(f"Monsters: {len(monsters)}")
         if target:
@@ -218,6 +227,14 @@ class Overlay:
                             font_scale=FONT_SCALE_SMALL,
                             text_color=COLOR_FPS,
                             with_bg=True)
+
+        # 화면 우상단에 이동/멈춤 상태 크게 표시
+        fh, fw = frame.shape[:2]
+        self._put_label(frame, move_label,
+                        fw - 180, 24,
+                        font_scale=FONT_SCALE_LARGE,
+                        text_color=move_color,
+                        with_bg=True)
 
     # ------------------------------------------------------------------
     # 유틸
