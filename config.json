@@ -16,11 +16,11 @@
 
         "motion": {
             "diff_threshold": 60,
-            "min_area": 1500,
+            "min_area": 4000,
             "max_area": 40000,
-            "min_width": 30,
+            "min_width": 40,
             "max_width": 250,
-            "min_height": 30,
+            "min_height": 40,
             "max_height": 250,
             "dilate_iterations": 2,
             "history_frames": 5,
