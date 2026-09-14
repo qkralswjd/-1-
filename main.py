@@ -38,6 +38,7 @@ from target_selector import select_target
 from controller import make_controller, BaseController
 from overlay import Overlay, ROISelector
 from screen_change_detector import ScreenChangeDetector
+from auto_hunter import AutoHunter
 
 
 # ------------------------------------------------------------------
