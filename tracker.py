@@ -90,7 +90,7 @@ class TrackedMonster:
         # 20프레임 동안 총 이동거리가 60px 미만 = 정적 (나무)
         # 나무는 흔들려도 실제 이동은 거의 없음
         # 몬스터는 20프레임(약 1.3초)이면 최소 60px 이상 이동
-        return self._total_movement < 80.0
+        return self._total_movement < 120.0
 
     @property
     def is_active(self) -> bool:
